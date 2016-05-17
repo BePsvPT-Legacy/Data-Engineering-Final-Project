@@ -1,0 +1,87 @@
+#!/usr/bin/env php
+<?php
+error_reporting(E_ALL);
+
+require_once __DIR__.'/vendor/autoload.php';
+
+$options = getopt('p:s:');
+
+if (! isset($options['p']) || false === ($path = realpath($options['p']))) {
+    exit('p(path) argument is required.'.PHP_EOL);
+} elseif (! isset($options['s'])) {
+    exit('s(server) argument is required.'.PHP_EOL);
+}
+
+list($address, $port) = explode(':', $options['s']);
+
+function sendData($data) {
+    global $address;
+    global $port;
+
+    $loop = React\EventLoop\Factory::create();
+
+    $tcpConnector = new React\SocketClient\TcpConnector($loop);
+
+    $tcpConnector->create($address, $port)->then(function (React\Stream\Stream $stream) use ($data) {
+        $stream->end($data);
+    });
+
+    $loop->run();
+}
+
+$loop = React\EventLoop\Factory::create();
+
+$tcpConnector = new React\SocketClient\TcpConnector($loop);
+
+$tcpConnector->create($address, $port)->then(function (React\Stream\Stream $stream) {
+    $stream->on('data', function ($data) use ($stream) {
+        $data = unpackData($data);
+
+        switch ($data['type']) {
+            case 'fileList':
+                echo 'Get file list.'.PHP_EOL;
+                $stream->end();
+                break;
+
+            default:
+                $stream->end();
+                break;
+        }
+    });
+    
+    $stream->write(packData('fileList'));
+});
+
+$loop->run();
+
+
+$lastIndex = indexDir($path);
+
+while (true) {
+    $newIndex = indexDir($path);
+
+    $newFiles = array_diff($newIndex['path'], $lastIndex['path']);
+    $removeFiles = array_diff($lastIndex['path'], $newIndex['path']);
+
+    if (! empty($removeFiles)) {
+        echo 'Send deleted file list.'.PHP_EOL;
+
+        sendData(packData('removeFile', $removeFiles));
+    }
+
+    if (! empty($newFiles)) {
+        foreach ($newFiles as $relativePath => $hash) {
+            echo 'Upload file: '.$relativePath.PHP_EOL;
+
+            sendData(packData('createFile', [
+                'relativePath' => $relativePath,
+                'hash' => $hash,
+                'content' => file_get_contents(file_build_path($path, $relativePath))
+            ]));
+        }
+    }
+
+    $lastIndex = indexDir($path);
+
+    sleep(3);
+}

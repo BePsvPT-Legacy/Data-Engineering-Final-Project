@@ -1,0 +1,54 @@
+#!/usr/bin/env php
+<?php
+error_reporting(E_ALL);
+
+define('ADDRESS', '0.0.0.0');
+define('PORT', '32123');
+
+require_once __DIR__.'/vendor/autoload.php';
+
+$loop = React\EventLoop\Factory::create();
+
+$socket = new React\Socket\Server($loop);
+
+$socket->on('connection', function (React\Socket\Connection $conn) {
+    $conn->on('data', function ($data) use ($conn) {
+        $filesystem = new \Illuminate\Filesystem\Filesystem();
+
+        $data = unpackData($data);
+
+        switch ($data['type']) {
+            case 'fileList':
+                $conn->write(packData('fileList', indexDir(file_build_path(__DIR__, 'cloud'))));
+                break;
+
+            case 'removeFile':
+                foreach ($data['data'] as $relativePath => $hash) {
+                    $path = file_build_path(__DIR__, 'cloud', $relativePath);
+
+                    $filesystem->delete($path);
+
+                    echo "Delete file: '{$path}'".PHP_EOL;
+                }
+                break;
+            
+            case 'createFile':
+                $path = file_build_path(__DIR__, 'cloud', $data['data']['relativePath']);
+
+                file_put_contents($path, $data['data']['content']);
+
+                $hashEqual = md5_file($path) === $data['data']['hash'] ? 'ok' : 'failed';
+
+                echo "New file arrived: '{$path}', hash check result: {$hashEqual}.".PHP_EOL;
+                break;
+
+            default:
+                $conn->close();
+                break;
+        }
+    });
+});
+
+$socket->listen(PORT, ADDRESS);
+
+$loop->run();
