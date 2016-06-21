@@ -67,6 +67,33 @@ while (true) {
     $newFiles = array_diff_key($newIndex, $lastIndex);
     $removeFiles = array_diff_key($lastIndex, $newIndex);
 
+    if (! empty($newFiles) && ! empty($removeFiles)) {
+        foreach ($newFiles as $newHash => $new) {
+            foreach ($removeFiles as $oldHash => $old) {
+                if ($new['type'] === $old['type'] && $new['size'] === $old['size'] && $new['quickHash'] === $old['quickHash']) {
+                    if ($new['path'] !== $old['path']) {
+                        $renameFiles[] = [
+                            'old' => $old['path'],
+                            'new' => $new['path'],
+                        ];
+                    }
+
+                    unset($newFiles[$newHash], $removeFiles[$oldHash]);
+
+                    break;
+                }
+            }
+        }
+
+        if (! empty($renameFiles)) {
+            echo 'Send rename file list'.PHP_EOL;
+
+            sendData(packData('rename', $renameFiles));
+
+            unset($renameFiles);
+        }
+    }
+
     if (! empty($removeFiles)) {
         echo 'Send deleted file list.'.PHP_EOL;
 

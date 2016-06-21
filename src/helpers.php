@@ -24,6 +24,7 @@ function indexDir($dir)
 
     foreach ($filesystem->allFiles($dir) as $file) {
         /** @var Symfony\Component\Finder\SplFileInfo $file */
+
         $hash = sha1(implode('|', [
             $file->getRelativePathname(), $file->getType(), $file->getSize(), $file->getMTime(),
         ]));

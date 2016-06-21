@@ -7,6 +7,16 @@ define('PORT', '32123');
 
 require_once __DIR__.'/vendor/autoload.php';
 
+function cloud () {
+    $path = file_build_path(__DIR__, 'cloud');
+
+    if (0 === func_num_args()) {
+        return $path;
+    }
+
+    return $path.DIRECTORY_SEPARATOR.implode(DIRECTORY_SEPARATOR, func_get_args());
+}
+
 $uploading = [];
 
 $loop = React\EventLoop\Factory::create();
@@ -23,12 +33,22 @@ $socket->on('connection', function (React\Socket\Connection $conn) use (&$upload
 
         switch ($data['type']) {
             case 'index':
-                $conn->write(packData('index', indexDir(file_build_path(__DIR__, 'cloud'))));
+                $conn->write(packData('index', indexDir(cloud())));
+                break;
+
+            case 'rename':
+                foreach ($data['data'] as $file) {
+                    create_dir(cloud(strstr($file['new'], '/', true)));
+
+                    $filesystem->move(cloud($file['old']), cloud($file['new']));
+
+                    echo "Rename file: {$file['old']} -> {$file['new']}".PHP_EOL;
+                }
                 break;
 
             case 'remove':
                 foreach ($data['data'] as $file) {
-                    $path = file_build_path(__DIR__, 'cloud', $file['path']);
+                    $path = cloud($file['path']);
 
                     $filesystem->delete($path);
 
@@ -59,9 +79,9 @@ $socket->on('connection', function (React\Socket\Connection $conn) use (&$upload
 
                 $checksum = md5_file($file['tempPath']) === $data['data']['checksum'] ? 'ok' : 'failed';
 
-                $newPath = file_build_path(__DIR__, 'cloud', $file['file']['path']);
+                $newPath = cloud($file['file']['path']);
 
-                create_dir(file_build_path(__DIR__, 'cloud', $file['file']['dir']));
+                create_dir(cloud($file['file']['dir']));
 
                 $filesystem->move($file['tempPath'], $newPath);
 
