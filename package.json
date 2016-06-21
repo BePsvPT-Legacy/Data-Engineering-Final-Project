@@ -1,0 +1,26 @@
+{
+  "name": "file-sync",
+  "version": "1.0.0",
+  "description": "",
+  "main": "server.js",
+  "dependencies": {
+    "socket.io": "^1.4.6",
+    "socket.io-client": "^1.4.6"
+  },
+  "devDependencies": {},
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "start": "node server.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/BePsvPT/Data-Engineering-Final-Project.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/BePsvPT/Data-Engineering-Final-Project/issues"
+  },
+  "homepage": "https://github.com/BePsvPT/Data-Engineering-Final-Project#readme"
+}
