@@ -36,6 +36,13 @@ io.on('connection', (socket) => {
 
   socket.on('rename', (data) => {
     console.log('Rename', data)
+    Promise.fromCallback((cb) => {
+      fs.move(data.old, data.new, cb)
+    }).then(() => {
+       console.log(data.old, ' -> ', data.new, ' success')
+    }).catch((err) => {
+      console.log('Rename error', err)
+    })
   })
 
   socket.on('remove', (data) => {
