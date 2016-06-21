@@ -13,13 +13,93 @@ const watcher = Chokidar.watch(argv.p, {
 
 const socket = Io.connect(argv.s, {reconnect: true})
 
-socket.on('index', function (data) {
-  console.log(data)
-})
+let local = (path, reverse = false) => {
+  if (reverse) {
+    return path.substr(path.indexOf('/') + 1)
+  }
 
-socket.on('connect', () => {
-  // Get server file index
-  socket.emit('index');
+  return `.${Path.sep}local${Path.sep}${path}`
+}
+
+const log = console.log.bind(console)
+
+let ready = false
+let localIndexes = {}
+
+watcher
+  .on('add', path => {
+    path = local(path)
+
+    let md5 = Md5File.sync(local(path))
+
+    if (! ready) {
+      localIndexes[md5] = {
+        path: path
+      }
+    } else {
+      Fs.readFile(local(path), 'utf8', (err, content) => {
+        socket.emit('add', {
+          path: path,
+          content: content,
+          md5: md5
+        })
+
+        log(`File ${path} has been added`)
+      })
+    }
+  })
+  .on('change', (path) => {
+    log('File', path, 'has been changed')
+  })
+  .on('unlink', path => {
+    path = local(path)
+
+    socket.emit('unlink', {
+      path
+    })
+
+    log(`File ${path} has been added`)
+  })
+
+watcher
+  .on('ready', () => {
+    ready = true
+
+    log('Initial scan complete. Ready for changes.')
+  })
+  .on('error', error => {
+    log('Error happened', error)
+  })
+
+socket.on('connect', (serverIndexes = {}) => {
+  Object.keys(localIndexes).forEach((md5) => {
+    if (serverIndexes.hasOwnProperty(md5)) {
+      if (localIndexes[md5].path !== serverIndexes[md5].path) {
+        socket.emit('rename', {
+          oldPath: serverIndexes[md5].path,
+          newPath: localIndexes[md5].path
+        })
+      }
+
+      delete serverIndexes[md5]
+    } else {
+      Fs.readFile(local(localIndexes[md5].path), 'utf8', (err, content) => {
+        socket.emit('add', {
+          path: localIndexes[md5].path,
+          content: content,
+          md5: Md5File.sync(local(localIndexes[md5].path))
+        })
+
+        log(`File ${localIndexes[md5].path} has been added`)
+      })
+    }
+  })
+
+  Object.keys(serverIndexes).forEach(md5 => {
+    socket.emit('unlink', {
+      path: serverIndexes[md5].path
+    })
+  })
 })
 
 socket.on('disconnect', () => {
@@ -29,62 +109,3 @@ socket.on('disconnect', () => {
 socket.on('error', (err) => {
   console.log(err)
 })
-
-let local = path => {
-  return `.${Path.sep}local${Path.sep}${path}`
-}
-
-const log = console.log.bind(console)
-
-let ready = false
-
-let index = {}
-
-watcher
-  .on('add', (path, stats) => {
-    path = path.substr(path.indexOf('/') + 1)
-
-    let md5 = Md5File.sync(local(path))
-
-    if (! ready) {
-      index[md5] = {
-        path: path
-      }
-    } else {
-      Fs.readFile(local(path), (err, content) => {
-        socket.emit('addFile', {
-          path: path,
-          content: content,
-          md5: md5
-        })
-
-        log(`Upload new file: ${path}`)
-      })
-    }
-  })
-  .on('addDir', (path, stats) => {
-    // socket.emit('addDir', {
-    //   path: path
-    // })
-
-    log(`Create new directory: ${path}`)
-  })
-  .on('change', (path, stats) => {
-    log('File', path, 'has been changed')
-  })
-  .on('unlink', path => {
-    log('File', path, 'has been removed')
-  })
-  .on('unlinkDir', path => {
-    log('Directory', path, 'has been removed')
-  })
-
-watcher
-  .on('ready', () => {
-    ready = true
-log(index)
-    log('Initial scan complete. Ready for changes.')
-  })
-  .on('error', error => {
-    log('Error happened', error)
-  })
