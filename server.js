@@ -1,7 +1,9 @@
 import fs from 'fs'
+import path from 'path'
 import express from 'express'
 import http from 'http'
 import Socket from 'socket.io'
+import Promise from 'bluebird'
 import { indexDir } from './helpers'
 
 const app = express()
@@ -18,6 +20,27 @@ io.on('connection', (socket) => {
     indexDir().then((data) => {
       socket.emit('index', data)
     })
+  })
+
+  socket.on('add', (data) => {
+    console.log('Add', data.path)
+    console.log(data)
+    Promise.fromCallback((cb) => {
+      fs.writeFile(path.join('cloud', data.path), data.content, cb)
+    }).then(() => {
+       console.log(data.path, 'writed')
+    }).catch((err) => {
+      console.log('Write error', err)
+    })
+  })
+
+  socket.on('rename', (data) => {
+    console.log('Rename', data)
+  })
+
+  socket.on('remove', (data) => {
+    console.log('Remove', data.path)
+    console.log(data)
   })
 })
 
