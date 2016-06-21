@@ -1,6 +1,7 @@
 import glob from 'glob'
 import Promise from 'bluebird'
 import fromPairs from 'lodash/fromPairs'
+import invert from 'lodash/invert'
 import md5File from 'md5-file/promise'
 
 export const indexDir = () => {
@@ -13,5 +14,5 @@ export const indexDir = () => {
       file.replace('./cloud/', ''),
       md5File(file)
     ])))
-  })
+  }).then((data) => invert(data))
 }
