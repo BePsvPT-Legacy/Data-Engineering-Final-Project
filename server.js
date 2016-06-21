@@ -47,7 +47,13 @@ io.on('connection', (socket) => {
 
   socket.on('remove', (data) => {
     console.log('Remove', data.path)
-    console.log(data)
+    Promise.fromCallback((cb) => {
+      fs.unlink(path.join('cloud', data.path), cb)
+    }).then(() => {
+       console.log(data.path, 'delete')
+    }).catch((err) => {
+      console.log('Delete error', err)
+    })
   })
 })
 
