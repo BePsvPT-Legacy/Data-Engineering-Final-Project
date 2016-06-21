@@ -23,23 +23,30 @@ function sendData($data) {
     $tcpConnector = new React\SocketClient\TcpConnector($loop);
 
     $tcpConnector->create($address, $port)->then(function (React\Stream\Stream $stream) use ($data) {
+        $stream->bufferSize = BUFFER_SIZE;
+
         $stream->end($data);
     });
 
     $loop->run();
 }
 
+$lastIndex = indexDir($path);
+
 $loop = React\EventLoop\Factory::create();
 
 $tcpConnector = new React\SocketClient\TcpConnector($loop);
 
-$tcpConnector->create($address, $port)->then(function (React\Stream\Stream $stream) {
-    $stream->on('data', function ($data) use ($stream) {
+$tcpConnector->create($address, $port)->then(function (React\Stream\Stream $stream) use (&$lastIndex) {
+    $stream->on('data', function ($data) use ($stream, &$lastIndex) {
         $data = unpackData($data);
 
         switch ($data['type']) {
-            case 'fileList':
+            case 'index':
                 echo 'Get file list.'.PHP_EOL;
+
+                $lastIndex = $data['data'];
+
                 $stream->end();
                 break;
 
@@ -48,40 +55,51 @@ $tcpConnector->create($address, $port)->then(function (React\Stream\Stream $stre
                 break;
         }
     });
-    
-    $stream->write(packData('fileList'));
+
+    $stream->write(packData('index'));
 });
 
 $loop->run();
 
-
-$lastIndex = indexDir($path);
-
 while (true) {
     $newIndex = indexDir($path);
 
-    $newFiles = array_diff($newIndex['path'], $lastIndex['path']);
-    $removeFiles = array_diff($lastIndex['path'], $newIndex['path']);
+    $newFiles = array_diff_key($newIndex, $lastIndex);
+    $removeFiles = array_diff_key($lastIndex, $newIndex);
 
     if (! empty($removeFiles)) {
         echo 'Send deleted file list.'.PHP_EOL;
 
-        sendData(packData('removeFile', $removeFiles));
+        sendData(packData('remove', $removeFiles));
     }
 
     if (! empty($newFiles)) {
-        foreach ($newFiles as $relativePath => $hash) {
-            echo 'Upload file: '.$relativePath.PHP_EOL;
+        foreach ($newFiles as $hash => $file) {
+            $fullPath = file_build_path($path, $file['path']);
 
-            sendData(packData('createFile', [
-                'relativePath' => $relativePath,
+            echo 'Upload file: '.$fullPath.PHP_EOL;
+
+            sendData(packData('create', array_merge($file, ['hash' => $hash])));
+
+            $fp = fopen($fullPath, "rb");
+
+            while ($string = fread($fp, FREAD_SIZE)) {
+                sendData(packData('uploading', [
+                    'hash' => $hash,
+                    'content' => base64_encode($string),
+                ]));
+            }
+
+            fclose($fp);
+
+            sendData(packData('uploaded', [
                 'hash' => $hash,
-                'content' => file_get_contents(file_build_path($path, $relativePath))
+                'checksum' => md5_file($fullPath),
             ]));
         }
     }
 
     $lastIndex = indexDir($path);
 
-    sleep(3);
+    sleep(2);
 }

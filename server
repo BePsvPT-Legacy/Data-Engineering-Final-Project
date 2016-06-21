@@ -7,39 +7,65 @@ define('PORT', '32123');
 
 require_once __DIR__.'/vendor/autoload.php';
 
+$uploading = [];
+
 $loop = React\EventLoop\Factory::create();
 
 $socket = new React\Socket\Server($loop);
 
-$socket->on('connection', function (React\Socket\Connection $conn) {
-    $conn->on('data', function ($data) use ($conn) {
+$socket->on('connection', function (React\Socket\Connection $conn) use (&$uploading) {
+    $conn->bufferSize = BUFFER_SIZE;
+
+    $conn->on('data', function ($data) use ($conn, &$uploading) {
         $filesystem = new \Illuminate\Filesystem\Filesystem();
 
         $data = unpackData($data);
 
         switch ($data['type']) {
-            case 'fileList':
-                $conn->write(packData('fileList', indexDir(file_build_path(__DIR__, 'cloud'))));
+            case 'index':
+                $conn->write(packData('index', indexDir(file_build_path(__DIR__, 'cloud'))));
                 break;
 
-            case 'removeFile':
-                foreach ($data['data'] as $relativePath => $hash) {
-                    $path = file_build_path(__DIR__, 'cloud', $relativePath);
+            case 'remove':
+                foreach ($data['data'] as $file) {
+                    $path = file_build_path(__DIR__, 'cloud', $file['path']);
 
                     $filesystem->delete($path);
 
                     echo "Delete file: '{$path}'".PHP_EOL;
                 }
                 break;
-            
-            case 'createFile':
-                $path = file_build_path(__DIR__, 'cloud', $data['data']['relativePath']);
 
-                file_put_contents($path, $data['data']['content']);
+            case 'create':
+                $tempPath = file_build_path(__DIR__, 'temp', $data['data']['hash']);
 
-                $hashEqual = md5_file($path) === $data['data']['hash'] ? 'ok' : 'failed';
+                $uploading[$data['data']['hash']] = [
+                    'file' => $data['data'],
+                    'fp' => fopen($tempPath, "w"),
+                    'tempPath' => $tempPath,
+                ];
 
-                echo "New file arrived: '{$path}', hash check result: {$hashEqual}.".PHP_EOL;
+                echo "Receiving new file: '{$data['data']['path']}'.".PHP_EOL;
+                break;
+
+            case 'uploading':
+                fwrite($uploading[$data['data']['hash']]['fp'], base64_decode($data['data']['content']));
+                break;
+
+            case 'uploaded':
+                $file = $uploading[$data['data']['hash']];
+
+                fclose($file['fp']);
+
+                $checksum = md5_file($file['tempPath']) === $data['data']['checksum'] ? 'ok' : 'failed';
+
+                $newPath = file_build_path(__DIR__, 'cloud', $file['file']['path']);
+
+                create_dir(file_build_path(__DIR__, 'cloud', $file['file']['dir']));
+
+                $filesystem->move($file['tempPath'], $newPath);
+
+                echo "Received file: '{$newPath}', checksum: {$checksum}".PHP_EOL;
                 break;
 
             default:
