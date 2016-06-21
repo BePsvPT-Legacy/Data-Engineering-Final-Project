@@ -27,7 +27,11 @@ io.on('connection', (socket) => {
     console.log('Add', data.path)
     console.log(data)
     Promise.fromCallback((cb) => {
-      fs.writeFile(path.join('cloud', data.path), data.content, cb)
+      fs.mkdirs(path.dirname(data.path))
+    }).then(() => {
+      return Promise.fromCallback(
+        (cb) => fs.writeFile(path.join('cloud', data.path), data.content, cb)
+      )
     }).then(() => {
        console.log(data.path, 'writed')
     }).catch((err) => {
@@ -55,6 +59,16 @@ io.on('connection', (socket) => {
     }).catch((err) => {
       console.log('Delete error', err)
     })
+  })
+
+  socket.on('download', ({ path }) => {
+    Promise.fromCallback((cb) => fs.readFile(cloudPath(path), 'utf8', cb))
+      .then((content) => {
+        socket.emit('download', {
+          path,
+          content
+        })
+      })
   })
 })
 
