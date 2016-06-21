@@ -9,6 +9,7 @@ import { indexDir } from './helpers'
 const app = express()
 const server = http.Server(app)
 const io = new Socket(server)
+const cloudPath = path.join.bind(path, 'cloud')
 
 io.on('connection', (socket) => {
   console.log('New connection')
@@ -48,7 +49,7 @@ io.on('connection', (socket) => {
   socket.on('unlink', (data) => {
     console.log('Remove', data.path)
     Promise.fromCallback((cb) => {
-      fs.unlink(path.join('cloud', data.path), cb)
+      fs.unlink(cloudPath(data.path), cb)
     }).then(() => {
        console.log(data.path, 'delete')
     }).catch((err) => {
