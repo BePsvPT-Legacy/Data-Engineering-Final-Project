@@ -45,7 +45,7 @@ io.on('connection', (socket) => {
     })
   })
 
-  socket.on('remove', (data) => {
+  socket.on('unlink', (data) => {
     console.log('Remove', data.path)
     Promise.fromCallback((cb) => {
       fs.unlink(path.join('cloud', data.path), cb)
