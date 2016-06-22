@@ -5,7 +5,8 @@
   "main": "server.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
-    "start": "node -r babel-register server.js"
+    "start": "node -r babel-register server.js",
+    "client": "node -r babel-register client.js"
   },
   "repository": {
     "type": "git",
