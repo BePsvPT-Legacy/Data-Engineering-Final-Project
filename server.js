@@ -1,4 +1,4 @@
-import fs from 'fs'
+import fs from 'fs-extra'
 import path from 'path'
 import express from 'express'
 import http from 'http'
@@ -27,7 +27,7 @@ io.on('connection', (socket) => {
     console.log('Add', data.path)
     console.log(data)
     Promise.fromCallback((cb) => {
-      fs.mkdirs(path.dirname(data.path))
+      fs.mkdirs(path.dirname(data.path), cb)
     }).then(() => {
       return Promise.fromCallback(
         (cb) => fs.writeFile(path.join('cloud', data.path), data.content, cb)
