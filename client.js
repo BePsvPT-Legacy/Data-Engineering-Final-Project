@@ -40,31 +40,37 @@ watcher
       }
     } else {
       Fs.readFile(local(path), 'utf8', (err, content) => {
-        socket.emit('add', {
-          path: path,
-          content: content,
-          md5: md5
-        })
+        socket.emit('add', { path, content, md5 })
 
-        log(`File ${path} has been added`)
+        log(`File '${path}' has been added`)
       })
     }
   })
   .on('change', (path) => {
-    log('File', path, 'has been changed')
+    path = local(path, true)
+
+    socket.emit('unlink', { path })
+
+    Fs.readFile(local(path), 'utf8', (err, content) => {
+      socket.emit('add', { path, content, md5 })
+
+      log(`File '${path}' has been changed`)
+    })
   })
   .on('unlink', path => {
     path = local(path, true)
 
-    if (ignoreFiles.indexOf(path) > -1) {
+    let index = ignoreFiles.indexOf(path)
+
+    if (index > -1) {
+      ignoreFiles.splice(index, 1)
+
       return
     }
 
-    socket.emit('unlink', {
-      path
-    })
+    socket.emit('unlink', { path })
 
-    log(`File ${path} has been deleted`)
+    log(`File '${path}' has been deleted`)
   })
 
 watcher
@@ -77,21 +83,21 @@ watcher
     log('Error happened', error)
   })
 
-socket.on('connect', (serverIndexes = {}) => {
+socket.on('index', (serverIndexes) => {
   let renames = {}
   let _localIndexes = localIndexes
   let paths = {server: [], local: []}
 
   Object.keys(serverIndexes).forEach(md5 => {
-    paths.server.push(serverIndexes[md5].path)
+    paths.server.push(serverIndexes[md5])
   })
 
   Object.keys(_localIndexes).forEach(md5 => {
     paths.local.push(_localIndexes[md5].path)
 
     if (serverIndexes.hasOwnProperty(md5)) {
-      if (_localIndexes[md5].path !== serverIndexes[md5].path) {
-        renames[_localIndexes[md5].path] = serverIndexes[md5].path
+      if (_localIndexes[md5].path !== serverIndexes[md5]) {
+        renames[_localIndexes[md5].path] = serverIndexes[md5]
       }
 
       delete serverIndexes[md5]
@@ -119,7 +125,7 @@ socket.on('connect', (serverIndexes = {}) => {
         if (paths.server.includes(next)) {
           renames[key] = conflictName(next)
 
-          fs.rename(next, conflictName(next), err => {
+          Fs.rename(next, conflictName(next), err => {
             if (err) {
               log(err)
             }
@@ -134,15 +140,41 @@ socket.on('connect', (serverIndexes = {}) => {
   })
 
   Object.keys(_localIndexes).forEach(md5 => {
-    Fs.readFile(local(localIndexes[md5].path), 'utf8', (err, content) => {
-      socket.emit('add', {
-        path: localIndexes[md5].path,
-        content: content,
-        md5: Md5File.sync(local(localIndexes[md5].path))
-      })
+    let newPath = localIndexes[md5].path
 
-      log(`File ${localIndexes[md5].path} has been added`)
-    })
+    if (paths.server.includes(newPath)) {
+      ignoreFiles.push(newPath)
+
+      newPath = conflictName(newPath)
+
+      ignoreFiles.push(newPath)
+
+      Fs.rename(local(localIndexes[md5].path), local(newPath), err => {
+        if (err) {
+          log(err)
+        }
+
+        Fs.readFile(local(newPath), 'utf8', (err, content) => {
+          socket.emit('add', {
+            path: newPath,
+            content: content,
+            md5: Md5File.sync(local(newPath))
+          })
+
+          log(`File '${newPath}' has been added`)
+        })
+      })
+    } else {
+      Fs.readFile(local(newPath), 'utf8', (err, content) => {
+        socket.emit('add', {
+          path: newPath,
+          content: content,
+          md5: Md5File.sync(local(newPath))
+        })
+
+        log(`File '${localIndexes[md5].path}' has been added`)
+      })
+    }
   })
 
   let _renames = {intermediate: [], target: []}
@@ -152,6 +184,8 @@ socket.on('connect', (serverIndexes = {}) => {
 
     _renames.intermediate.push({oldPath: oldPath, newPath: intermediate})
     _renames.target.push({oldPath: intermediate, newPath: renames[oldPath]})
+
+    log(`File '${oldPath}' has been renamed to ${renames[oldPath]}`)
   })
 
   _renames.intermediate.forEach((item) => { socket.emit('rename', item) })
@@ -159,19 +193,25 @@ socket.on('connect', (serverIndexes = {}) => {
 
   Object.keys(serverIndexes).forEach(md5 => {
     socket.emit('download', {
-      path: serverIndexes[md5].path
+      path: serverIndexes[md5]
     })
   })
 })
 
 socket.on('download', data => {
-  fs.writeFile(data.path, data.content, 'utf8', (err) => {
+  Fs.writeFile(local(data.path), data.content, 'utf8', (err) => {
     if (err) {
       log(err)
     } else {
       ignoreFiles.push(data.path)
+
+      log(`File '${data.path}' has been downloaded`)
     }
   })
+})
+
+socket.on('connect', () => {
+  console.log('connect')
 })
 
 socket.on('disconnect', () => {
