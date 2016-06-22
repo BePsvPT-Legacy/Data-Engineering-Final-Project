@@ -15,14 +15,16 @@ const debug = _debug('file-sync:server')
 
 io.on('connection', (socket) => {
   debug('New connection')
-  indexDir().then((data) => {
-    socket.emit('index', data)
-  })
-
-  socket.on('index', () => {
+  const emitIndex = () => {
     indexDir().then((data) => {
       socket.emit('index', data)
     })
+  }
+
+  emitIndex();
+
+  socket.on('index', () => {
+    emitIndex();
   })
 
   socket.on('add', (data) => {
